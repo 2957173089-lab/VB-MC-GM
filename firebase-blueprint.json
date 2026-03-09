@@ -1,0 +1,78 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "User profile information",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "email": { "type": "string", "format": "email" },
+        "displayName": { "type": "string" },
+        "photoURL": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "email"]
+    },
+    "LikedSong": {
+      "title": "LikedSong",
+      "description": "A song liked by a user",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "songId": { "type": "string" },
+        "title": { "type": "string" },
+        "artist": { "type": "string" },
+        "coverUrl": { "type": "string" },
+        "audioUrl": { "type": "string" },
+        "addedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "songId", "title", "artist", "coverUrl", "addedAt"]
+    },
+    "Playlist": {
+      "title": "Playlist",
+      "description": "A custom playlist created by a user",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "name": { "type": "string" },
+        "coverUrl": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "name", "createdAt"]
+    },
+    "PlaylistSong": {
+      "title": "PlaylistSong",
+      "description": "A song added to a custom playlist",
+      "type": "object",
+      "properties": {
+        "playlistId": { "type": "string" },
+        "userId": { "type": "string" },
+        "songId": { "type": "string" },
+        "title": { "type": "string" },
+        "artist": { "type": "string" },
+        "coverUrl": { "type": "string" },
+        "audioUrl": { "type": "string" },
+        "addedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["playlistId", "userId", "songId", "title", "artist", "coverUrl", "addedAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/User" },
+      "description": "User profiles"
+    },
+    "/likedSongs/{docId}": {
+      "schema": { "$ref": "#/entities/LikedSong" },
+      "description": "Liked songs"
+    },
+    "/playlists/{docId}": {
+      "schema": { "$ref": "#/entities/Playlist" },
+      "description": "Custom playlists"
+    },
+    "/playlistSongs/{docId}": {
+      "schema": { "$ref": "#/entities/PlaylistSong" },
+      "description": "Songs in custom playlists"
+    }
+  }
+}

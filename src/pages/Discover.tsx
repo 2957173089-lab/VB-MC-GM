@@ -1,6 +1,6 @@
-import { useState } from 'react';
-import { Search, Play } from 'lucide-react';
-import { usePlayer, MOCK_PLAYLIST } from '../store/PlayerContext';
+import { useState, useEffect } from 'react';
+import { Search, Play, Loader2 } from 'lucide-react';
+import { usePlayer, Song } from '../store/PlayerContext';
 
 /**
  * 发现页 (Discover)
@@ -8,12 +8,58 @@ import { usePlayer, MOCK_PLAYLIST } from '../store/PlayerContext';
  */
 export default function Discover() {
   const [query, setQuery] = useState('');
+  const [searchResults, setSearchResults] = useState<Song[]>([]);
+  const [isSearching, setIsSearching] = useState(false);
   const { playSong } = usePlayer();
 
-  const searchResults = query.trim() === '' ? [] : MOCK_PLAYLIST.filter(song =>
-    song.title.toLowerCase().includes(query.toLowerCase()) ||
-    song.artist.toLowerCase().includes(query.toLowerCase())
-  );
+  useEffect(() => {
+    const timer = setTimeout(async () => {
+      if (query.trim() === '') {
+        setSearchResults([]);
+        return;
+      }
+      setIsSearching(true);
+      try {
+        // 使用备用音乐 API 进行搜索
+        let res = await fetch(`https://api.music.areschang.top/search?keyword=${encodeURIComponent(query)}&limit=20`);
+
+        if (!res.ok) {
+          // 如果第一个 API 失败，尝试第二个 API
+          res = await fetch(`http://iwenwiki.com:3000/search?keywords=${encodeURIComponent(query)}&limit=20`);
+        }
+        const data = await res.json();
+        let songs: Song[] = [];
+
+        // 根据不同 API 的数据结构进行处理
+        if (data.result && data.result.songs) {
+          // iwenwiki API 格式
+          songs = data.result.songs.filter((item: any) => item.mp3Url || item.id).map((item: any) => ({
+            id: String(item.id),
+            title: item.name,
+            artist: item.artists?.map((a: any) => a.name).join(', ') || '未知歌手',
+            coverUrl: item.album?.picUrl || `https://picsum.photos/seed/${item.id}/400/400`,
+            audioUrl: item.mp3Url || `https://music.areschang.top/url?id=${item.id}`
+          }));
+        } else if (Array.isArray(data)) {
+          // areschang API 格式
+          songs = data.filter((item: any) => item.url || item.id).map((item: any) => ({
+            id: String(item.id),
+            title: item.title || item.name,
+            artist: item.artist || item.author || '未知歌手',
+            coverUrl: item.cover || item.pic || `https://picsum.photos/seed/${item.id}/400/400`,
+            audioUrl: item.url || item.mp3Url || `https://music.areschang.top/url?id=${item.id}`
+          }));
+        }
+        setSearchResults(songs);
+      } catch (error) {
+        console.error("搜索失败", error);
+      } finally {
+        setIsSearching(false);
+      }
+    }, 500); // 500ms 防抖
+
+    return () => clearTimeout(timer);
+  }, [query]);
 
   return (
     <div className="p-6 h-full flex flex-col">
@@ -39,11 +85,15 @@ export default function Discover() {
       {query.trim() !== '' ? (
         <div className="space-y-4 overflow-y-auto pb-20 hide-scrollbar">
           <h2 className="text-lg font-semibold mb-3">搜索结果</h2>
-          {searchResults.length > 0 ? (
+          {isSearching ? (
+            <div className="flex justify-center py-8">
+              <Loader2 className="animate-spin text-emerald-400" size={24} />
+            </div>
+          ) : searchResults.length > 0 ? (
             searchResults.map(song => (
               <div 
                 key={song.id} 
-                onClick={() => playSong(song)} 
+                onClick={() => playSong(song, searchResults)} 
                 className="flex items-center gap-4 p-3 rounded-xl bg-zinc-800/30 border border-white/5 hover:bg-zinc-800/60 transition-colors cursor-pointer"
               >
                 <img src={song.coverUrl} alt={song.title} className="w-12 h-12 rounded-md object-cover" referrerPolicy="no-referrer" />

@@ -1,71 +1,56 @@
-import { Plus } from 'lucide-react';
+import { usePlayer } from '../store/PlayerContext';
+import { useNavigate } from 'react-router-dom';
 
-/**
- * 模式页 (Modes)
- */
 export default function Modes() {
+  const { playSong } = usePlayer();
+  const navigate = useNavigate();
+
+  const handleModeClick = async (term: string) => {
+    try {
+      const response = await fetch(`https://itunes.apple.com/search?term=${encodeURIComponent(term)}&entity=song&limit=20`);
+      const data = await response.json();
+      if (data.results && data.results.length > 0) {
+        const songs = data.results.filter((item: any) => item.previewUrl).map((item: any) => ({
+          id: item.trackId.toString(),
+          title: item.trackName,
+          artist: item.artistName,
+          coverUrl: item.artworkUrl100.replace('100x100', '600x600'),
+          audioUrl: item.previewUrl,
+        }));
+        if (songs.length > 0) {
+          playSong(songs[0], songs);
+          navigate('/player');
+        } else {
+          alert('未找到可播放的歌曲');
+        }
+      }
+    } catch (error) {
+      console.error("Failed to fetch mode songs", error);
+    }
+  };
+
   return (
-    <div className="p-6 h-full flex flex-col bg-[#4a5559] text-white overflow-y-auto no-scrollbar pb-24">
-      <header className="mb-6 mt-4 flex justify-between items-start">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">听歌模式</h1>
-          <div className="flex items-center gap-2 mt-2">
-            <span className="text-zinc-300 text-xs">升级会员，推荐更...</span>
-            <button className="bg-white/20 text-[10px] px-2 py-0.5 rounded-full">1元续费 &gt;</button>
-            <span className="text-zinc-300 text-xs">双人一起听</span>
-          </div>
-        </div>
-        <div className="flex items-center gap-2">
-          <div className="w-8 h-8 rounded-full bg-red-400 flex items-center justify-center text-white text-xs font-bold">
-            癸
-          </div>
-          <button className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center text-white">
-            <Plus size={16} />
-          </button>
-        </div>
+    <div className="p-6 h-full flex flex-col">
+      <header className="mb-8 mt-4">
+        <h1 className="text-3xl font-bold tracking-tight">VIBE 模式</h1>
+        <p className="text-zinc-400 mt-2 text-sm">选择你当下的心情与场景</p>
       </header>
 
-      <div className="space-y-3 mb-6">
-        <button className="w-full py-4 rounded-xl bg-white/10 text-center font-medium text-lg active:scale-95 transition-transform">
-          默认模式
-        </button>
-        <button className="w-full py-4 rounded-xl bg-white text-zinc-900 text-center font-medium text-lg active:scale-95 transition-transform shadow-lg flex items-center justify-center gap-2">
-          <span className="w-1 h-3 bg-zinc-900 rounded-full"></span>
-          <span className="w-1 h-4 bg-zinc-900 rounded-full"></span>
-          <span className="w-1 h-2 bg-zinc-900 rounded-full"></span>
-          熟悉模式
-        </button>
-        <button className="w-full py-4 rounded-xl bg-white/10 text-center font-medium text-lg active:scale-95 transition-transform">
-          新鲜模式
-        </button>
-      </div>
-
-      <div className="grid grid-cols-3 gap-y-6 gap-x-4">
-        <ModeIcon icon="🏃" label="动感健身" />
-        <ModeIcon icon="🎧" label="DJ模式" />
-        <ModeIcon icon="☹️" label="深夜 EMO" />
-        <ModeIcon icon="📚" label="图书馆" />
-        <ModeIcon icon="🌙" label="助眠模式" />
-        <ModeIcon icon="🎵" label="抖音漫游" />
-        <ModeIcon icon="🛁" label="洗澡" />
-        <ModeIcon icon="🍃" label="Chill 放松" />
-        <ModeIcon icon="😊" label="快乐时光" />
-        <ModeIcon icon="🎛️" label="电音" />
-        <ModeIcon icon="▶️" label="音乐视频" />
-        <ModeIcon icon="🐉" label="春节模式" />
-        <ModeIcon icon="🗣️" label="粤语" />
-        <ModeIcon icon="🚌" label="通勤必听" />
-        <ModeIcon icon="💔" label="失恋必听" />
+      <div className="grid grid-cols-2 gap-4">
+        <ModeCard title="默认模式" subtitle="猜你喜欢" color="from-emerald-500/20 to-emerald-900/20" onClick={() => handleModeClick('pop')} />
+        <ModeCard title="熟悉模式" subtitle="常听老歌" color="from-blue-500/20 to-blue-900/20" onClick={() => handleModeClick('classic')} />
+        <ModeCard title="新鲜模式" subtitle="探索未知" color="from-purple-500/20 to-purple-900/20" onClick={() => handleModeClick('indie')} />
+        <ModeCard title="深夜 Emo" subtitle="网抑云时间" color="from-indigo-500/20 to-indigo-900/20" onClick={() => handleModeClick('sad')} />
       </div>
     </div>
   );
 }
 
-function ModeIcon({ icon, label }: { icon: string; label: string }) {
+function ModeCard({ title, subtitle, color, onClick }: { title: string; subtitle: string; color: string, onClick: () => void }) {
   return (
-    <div className="flex flex-col items-center gap-2 cursor-pointer active:scale-95 transition-transform">
-      <div className="text-2xl">{icon}</div>
-      <span className="text-xs text-zinc-200">{label}</span>
+    <div onClick={onClick} className={`aspect-square rounded-2xl p-4 flex flex-col justify-end bg-gradient-to-br ${color} border border-white/5 backdrop-blur-sm active:scale-95 transition-transform cursor-pointer`}>
+      <h3 className="font-semibold text-lg">{title}</h3>
+      <p className="text-xs text-zinc-400 mt-1">{subtitle}</p>
     </div>
   );
 }

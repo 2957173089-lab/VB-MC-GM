@@ -10,25 +10,43 @@ const router = express.Router();
  */
 router.get('/recommendations', async (req, res) => {
   try {
-    // 请求第三方 API 获取歌单详情
-    const response = await fetch('https://api.injahow.cn/meting/?type=playlist&id=3778678');
+    // 尝试第一个音乐 API
+    let response = await fetch('https://api.music.areschang.top/search?keyword=热门&limit=20');
+
+    if (!response.ok) {
+      // 如果第一个 API 失败，尝试第二个 API
+      response = await fetch('http://iwenwiki.com:3000/search?keywords=热门&limit=20');
+    }
     
     if (!response.ok) {
-      throw new Error('Failed to fetch from Meting API');
+      throw new Error('All music APIs failed');
     }
 
     const data = await response.json();
     
     // 格式化数据，适配我们前端的 Song 接口
-    // 为了保证加载速度，我们先只取前 20 首歌
-    const formattedSongs = data.slice(0, 20).map((song: any) => ({
-      id: String(song.id),
-      title: song.name,
-      artist: song.artist,
-      coverUrl: song.pic,
-      audioUrl: song.url,
-      lrcUrl: song.lrc // 歌词链接
-    }));
+    let formattedSongs = [];
+
+    // 根据不同 API 的数据结构进行处理
+    if (data.result && data.result.songs) {
+      // iwenwiki API 格式
+      formattedSongs = data.result.songs.slice(0, 20).map((song: any) => ({
+        id: String(song.id),
+        title: song.name,
+        artist: song.artists?.map((a: any) => a.name).join(', ') || '未知歌手',
+        coverUrl: song.album?.picUrl || `https://picsum.photos/seed/${song.id}/400/400`,
+        audioUrl: song.mp3Url || `https://music.areschang.top/url?id=${song.id}`
+      }));
+    } else if (Array.isArray(data)) {
+      // areschang API 格式
+      formattedSongs = data.slice(0, 20).map((song: any) => ({
+        id: String(song.id),
+        title: song.title || song.name,
+        artist: song.artist || song.author || '未知歌手',
+        coverUrl: song.cover || song.pic || `https://picsum.photos/seed/${song.id}/400/400`,
+        audioUrl: song.url || song.mp3Url || `https://music.areschang.top/url?id=${song.id}`
+      }));
+    }
 
     res.json(formattedSongs);
   } catch (error) {

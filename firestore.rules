@@ -1,0 +1,171 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    // Collection: users
+    // Document ID: userId
+    // Fields:
+    //   - uid: string (required)
+    //   - email: string (required)
+    //   - displayName: string (optional)
+    //   - photoURL: string (optional)
+    //   - createdAt: string (optional)
+    //
+    // Collection: likedSongs
+    // Document ID: auto-generated
+    // Fields:
+    //   - userId: string (required)
+    //   - songId: string (required)
+    //   - title: string (required)
+    //   - artist: string (required)
+    //   - coverUrl: string (required)
+    //   - audioUrl: string (optional)
+    //   - addedAt: string (required)
+    //
+    // Collection: playlists
+    // Document ID: auto-generated
+    // Fields:
+    //   - userId: string (required)
+    //   - name: string (required)
+    //   - coverUrl: string (optional)
+    //   - createdAt: string (required)
+    //
+    // Collection: playlistSongs
+    // Document ID: auto-generated
+    // Fields:
+    //   - playlistId: string (required)
+    //   - userId: string (required)
+    //   - songId: string (required)
+    //   - title: string (required)
+    //   - artist: string (required)
+    //   - coverUrl: string (required)
+    //   - audioUrl: string (optional)
+    //   - addedAt: string (required)
+    //
+    // Collection: recentSongs
+    // Document ID: auto-generated
+    // Fields:
+    //   - userId: string (required)
+    //   - songId: string (required)
+    //   - title: string (required)
+    //   - artist: string (required)
+    //   - coverUrl: string (required)
+    //   - audioUrl: string (optional)
+    //   - playedAt: string (required)
+    // ===============================================================
+    
+    // Helper Functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+    function isDocOwner() {
+      return isAuthenticated() && request.auth.uid == resource.data.userId;
+    }
+    function hasRequiredFields(fields) {
+      return request.resource.data.keys().hasAll(fields);
+    }
+    function hasOnlyAllowedFields(fields) {
+      return request.resource.data.keys().hasOnly(fields);
+    }
+    function areImmutableFieldsUnchanged(fields) {
+      return !request.resource.data.diff(resource.data).affectedKeys().hasAny(fields);
+    }
+    
+    // Domain Validators
+    function isValidUser() {
+      return hasRequiredFields(['uid', 'email']) &&
+             hasOnlyAllowedFields(['uid', 'email', 'displayName', 'photoURL', 'createdAt']) &&
+             request.resource.data.uid is string &&
+             request.resource.data.email is string &&
+             (!('displayName' in request.resource.data) || (request.resource.data.displayName is string && request.resource.data.displayName.size() < 100)) &&
+             (!('photoURL' in request.resource.data) || (request.resource.data.photoURL is string && request.resource.data.photoURL.size() < 1000)) &&
+             (!('createdAt' in request.resource.data) || request.resource.data.createdAt is string);
+    }
+    
+    function isValidLikedSong() {
+      return hasRequiredFields(['userId', 'songId', 'title', 'artist', 'coverUrl', 'addedAt']) &&
+             hasOnlyAllowedFields(['userId', 'songId', 'title', 'artist', 'coverUrl', 'audioUrl', 'addedAt']) &&
+             request.resource.data.userId is string &&
+             request.resource.data.songId is string &&
+             request.resource.data.title is string && request.resource.data.title.size() < 200 &&
+             request.resource.data.artist is string && request.resource.data.artist.size() < 200 &&
+             request.resource.data.coverUrl is string && request.resource.data.coverUrl.size() < 1000 &&
+             (!('audioUrl' in request.resource.data) || (request.resource.data.audioUrl is string && request.resource.data.audioUrl.size() < 1000)) &&
+             request.resource.data.addedAt is string;
+    }
+    
+    function isValidPlaylist() {
+      return hasRequiredFields(['userId', 'name', 'createdAt']) &&
+             hasOnlyAllowedFields(['userId', 'name', 'coverUrl', 'createdAt']) &&
+             request.resource.data.userId is string &&
+             request.resource.data.name is string && request.resource.data.name.size() > 0 && request.resource.data.name.size() < 100 &&
+             (!('coverUrl' in request.resource.data) || (request.resource.data.coverUrl is string && request.resource.data.coverUrl.size() < 1000)) &&
+             request.resource.data.createdAt is string;
+    }
+    
+    function isValidPlaylistSong() {
+      return hasRequiredFields(['playlistId', 'userId', 'songId', 'title', 'artist', 'coverUrl', 'addedAt']) &&
+             hasOnlyAllowedFields(['playlistId', 'userId', 'songId', 'title', 'artist', 'coverUrl', 'audioUrl', 'addedAt']) &&
+             request.resource.data.playlistId is string &&
+             request.resource.data.userId is string &&
+             request.resource.data.songId is string &&
+             request.resource.data.title is string && request.resource.data.title.size() < 200 &&
+             request.resource.data.artist is string && request.resource.data.artist.size() < 200 &&
+             request.resource.data.coverUrl is string && request.resource.data.coverUrl.size() < 1000 &&
+             (!('audioUrl' in request.resource.data) || (request.resource.data.audioUrl is string && request.resource.data.audioUrl.size() < 1000)) &&
+             request.resource.data.addedAt is string;
+    }
+
+    function isValidRecentSong() {
+      return hasRequiredFields(['userId', 'songId', 'title', 'artist', 'coverUrl', 'playedAt']) &&
+             hasOnlyAllowedFields(['userId', 'songId', 'title', 'artist', 'coverUrl', 'audioUrl', 'playedAt']) &&
+             request.resource.data.userId is string &&
+             request.resource.data.songId is string &&
+             request.resource.data.title is string && request.resource.data.title.size() < 200 &&
+             request.resource.data.artist is string && request.resource.data.artist.size() < 200 &&
+             request.resource.data.coverUrl is string && request.resource.data.coverUrl.size() < 1000 &&
+             (!('audioUrl' in request.resource.data) || (request.resource.data.audioUrl is string && request.resource.data.audioUrl.size() < 1000)) &&
+             request.resource.data.playedAt is string;
+    }
+
+    match /users/{userId} {
+      allow read: if isOwner(userId);
+      allow create: if isOwner(userId) && isValidUser() && request.resource.data.uid == userId;
+      allow update: if isOwner(userId) && isValidUser() && areImmutableFieldsUnchanged(['uid', 'createdAt']);
+      allow delete: if isOwner(userId);
+    }
+    
+    match /likedSongs/{docId} {
+      allow read: if isAuthenticated() && resource.data.userId == request.auth.uid;
+      allow create: if isAuthenticated() && isValidLikedSong() && request.resource.data.userId == request.auth.uid;
+      allow update: if isDocOwner() && isValidLikedSong() && areImmutableFieldsUnchanged(['userId', 'songId', 'addedAt']);
+      allow delete: if isDocOwner();
+    }
+    
+    match /playlists/{docId} {
+      allow read: if isAuthenticated() && resource.data.userId == request.auth.uid;
+      allow create: if isAuthenticated() && isValidPlaylist() && request.resource.data.userId == request.auth.uid;
+      allow update: if isDocOwner() && isValidPlaylist() && areImmutableFieldsUnchanged(['userId', 'createdAt']);
+      allow delete: if isDocOwner();
+    }
+    
+    match /playlistSongs/{docId} {
+      allow read: if isAuthenticated() && resource.data.userId == request.auth.uid;
+      allow create: if isAuthenticated() && isValidPlaylistSong() && request.resource.data.userId == request.auth.uid;
+      allow update: if isDocOwner() && isValidPlaylistSong() && areImmutableFieldsUnchanged(['playlistId', 'userId', 'songId', 'addedAt']);
+      allow delete: if isDocOwner();
+    }
+    
+    match /recentSongs/{docId} {
+      allow read: if isAuthenticated() && resource.data.userId == request.auth.uid;
+      allow create: if isAuthenticated() && isValidRecentSong() && request.resource.data.userId == request.auth.uid;
+      allow update: if isDocOwner() && isValidRecentSong() && areImmutableFieldsUnchanged(['userId', 'songId']);
+      allow delete: if isDocOwner();
+    }
+  }
+}

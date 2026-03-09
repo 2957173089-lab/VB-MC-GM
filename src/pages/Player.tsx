@@ -1,7 +1,10 @@
 import { useState, useEffect } from 'react';
-import { Play, Pause, SkipBack, SkipForward, ListMusic, Shuffle, Maximize2, Minimize2 } from 'lucide-react';
+import { Play, Pause, SkipBack, SkipForward, ListMusic, Shuffle, Repeat, Repeat1, Maximize2, Minimize2, Heart, FolderPlus, X } from 'lucide-react';
 import { usePlayer } from '../store/PlayerContext';
 import { motion, AnimatePresence, PanInfo } from 'motion/react';
+import { useAuth } from '../hooks/useAuth';
+import { db } from '../firebase';
+import { collection, query, where, getDocs, addDoc, deleteDoc, doc, updateDoc } from 'firebase/firestore';
 
 const MOCK_LYRICS = [
   '还记得你说家是唯一的城堡',
@@ -17,8 +20,166 @@ const MOCK_LYRICS = [
  * 支持 形态 A (驻留模式) 和 形态 B (沉浸式滑动模式)
  */
 export default function Player() {
-  const { currentSong, isPlaying, togglePlay, isImmersive, setIsImmersive, nextSong, prevSong } = usePlayer();
+  const { currentSong, isPlaying, togglePlay, isImmersive, setIsImmersive, nextSong, prevSong, progress, currentTime, duration, playMode, togglePlayMode } = usePlayer();
   const [lyricIndex, setLyricIndex] = useState(0);
+  const { user } = useAuth();
+  const [isLiked, setIsLiked] = useState(false);
+  const [likeDocId, setLikeDocId] = useState<string | null>(null);
+  const [showPlaylistModal, setShowPlaylistModal] = useState(false);
+  const [userPlaylists, setUserPlaylists] = useState<any[]>([]);
+
+  useEffect(() => {
+    if (showPlaylistModal && user) {
+      const q = query(collection(db, 'playlists'), where('userId', '==', user.uid));
+      getDocs(q).then(snapshot => {
+        setUserPlaylists(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+      });
+    }
+  }, [showPlaylistModal, user]);
+
+  const handleAddToPlaylist = async (playlistId: string) => {
+    if (!user || !currentSong) return;
+    try {
+      await addDoc(collection(db, 'playlistSongs'), {
+        playlistId,
+        userId: user.uid,
+        songId: currentSong.id,
+        title: currentSong.title,
+        artist: currentSong.artist,
+        coverUrl: currentSong.coverUrl,
+        audioUrl: currentSong.audioUrl || '',
+        addedAt: new Date().toISOString()
+      });
+      alert('已添加到歌单');
+      setShowPlaylistModal(false);
+    } catch (error) {
+      console.error(error);
+      alert('添加失败');
+    }
+  };
+
+  useEffect(() => {
+    const checkLiked = async () => {
+      if (!user || !currentSong) return;
+      const q = query(collection(db, 'likedSongs'), where('userId', '==', user.uid), where('songId', '==', currentSong.id));
+      const snapshot = await getDocs(q);
+      if (!snapshot.empty) {
+        setIsLiked(true);
+        setLikeDocId(snapshot.docs[0].id);
+      } else {
+        setIsLiked(false);
+        setLikeDocId(null);
+      }
+    };
+    checkLiked();
+  }, [user, currentSong]);
+
+  useEffect(() => {
+    const recordRecentSong = async () => {
+      if (!user || !currentSong) return;
+      try {
+        const q = query(collection(db, 'recentSongs'), where('userId', '==', user.uid), where('songId', '==', currentSong.id));
+        const snapshot = await getDocs(q);
+        
+        if (!snapshot.empty) {
+          const docId = snapshot.docs[0].id;
+          await updateDoc(doc(db, 'recentSongs', docId), {
+            playedAt: new Date().toISOString()
+          });
+        } else {
+          await addDoc(collection(db, 'recentSongs'), {
+            userId: user.uid,
+            songId: currentSong.id,
+            title: currentSong.title,
+            artist: currentSong.artist,
+            coverUrl: currentSong.coverUrl,
+            audioUrl: currentSong.audioUrl || '',
+            playedAt: new Date().toISOString()
+          });
+        }
+      } catch (error) {
+        console.error("Failed to record recent song", error);
+      }
+    };
+    recordRecentSong();
+  }, [currentSong, user]);
+
+  const handleLike = async () => {
+    if (!user) {
+      alert("请先登录");
+      return;
+    }
+    if (!currentSong) return;
+
+    try {
+      if (isLiked && likeDocId) {
+        await deleteDoc(doc(db, 'likedSongs', likeDocId));
+        setIsLiked(false);
+        setLikeDocId(null);
+      } else {
+        const docRef = await addDoc(collection(db, 'likedSongs'), {
+          userId: user.uid,
+          songId: currentSong.id,
+          title: currentSong.title,
+          artist: currentSong.artist,
+          coverUrl: currentSong.coverUrl,
+          audioUrl: currentSong.audioUrl || '',
+          addedAt: new Date().toISOString()
+        });
+        setIsLiked(true);
+        setLikeDocId(docRef.id);
+      }
+    } catch (error) {
+      console.error("操作失败", error);
+    }
+  };
+
+  const handleCollect = async () => {
+    if (!user) {
+      alert("请先登录");
+      return;
+    }
+    if (!currentSong) return;
+
+    try {
+      const q = query(collection(db, 'playlists'), where('userId', '==', user.uid), where('name', '==', '默认歌单'));
+      const snapshot = await getDocs(q);
+      let playlistId = '';
+
+      if (snapshot.empty) {
+        const docRef = await addDoc(collection(db, 'playlists'), {
+          userId: user.uid,
+          name: '默认歌单',
+          createdAt: new Date().toISOString()
+        });
+        playlistId = docRef.id;
+      } else {
+        playlistId = snapshot.docs[0].id;
+      }
+
+      const qSong = query(collection(db, 'playlistSongs'), where('playlistId', '==', playlistId), where('songId', '==', currentSong.id));
+      const songSnapshot = await getDocs(qSong);
+      if (!songSnapshot.empty) {
+        alert('已在默认歌单中');
+        return;
+      }
+
+      await addDoc(collection(db, 'playlistSongs'), {
+        playlistId,
+        userId: user.uid,
+        songId: currentSong.id,
+        title: currentSong.title,
+        artist: currentSong.artist,
+        coverUrl: currentSong.coverUrl,
+        audioUrl: currentSong.audioUrl || '',
+        addedAt: new Date().toISOString()
+      });
+      alert('已收藏到默认歌单');
+    } catch (error) {
+      console.error(error);
+      alert('收藏失败');
+    }
+  };
 
   useEffect(() => {
     if (!isPlaying) return;
@@ -29,6 +190,14 @@ export default function Player() {
   }, [isPlaying]);
 
   if (!currentSong) return null;
+
+  // 格式化时间 (例如 01:24)
+  const formatTime = (time: number) => {
+    if (isNaN(time)) return '00:00';
+    const m = Math.floor(time / 60).toString().padStart(2, '0');
+    const s = Math.floor(time % 60).toString().padStart(2, '0');
+    return `${m}:${s}`;
+  };
 
   // 处理手势滑动结束事件 (实现类似汽水音乐的上下滑动切歌)
   const handleDragEnd = (event: MouseEvent | TouchEvent | PointerEvent, info: PanInfo) => {
@@ -129,23 +298,38 @@ export default function Player() {
       </AnimatePresence>
 
       {/* 进度条与控制区 */}
-      <div className="w-full max-w-[360px] space-y-8 mb-2 z-10">
+      <div className="w-full max-w-[360px] space-y-6 mb-2 z-10">
+        
+        {/* 互动按钮区 (喜欢、收藏等) */}
+        <div className="flex items-center justify-between px-8 mb-2">
+          <button onClick={handleLike} className="transition-colors active:scale-90">
+            <Heart size={24} className={isLiked ? "text-red-500 fill-red-500" : "text-zinc-400 hover:text-white"} />
+          </button>
+          <button onClick={handleCollect} className="transition-colors active:scale-90">
+            <FolderPlus size={24} className="text-zinc-400 hover:text-white" />
+          </button>
+        </div>
+
         {/* 进度条 */}
         <div className="space-y-2">
           <div className="h-1.5 w-full bg-white/10 rounded-full overflow-hidden backdrop-blur-md border border-white/5">
-            <div className="h-full bg-emerald-400 w-1/3 rounded-full relative">
+            <div className="h-full bg-emerald-400 rounded-full relative" style={{ width: `${progress}%` }}>
               <div className="absolute right-0 top-1/2 -translate-y-1/2 w-2.5 h-2.5 bg-white rounded-full shadow-[0_0_10px_rgba(255,255,255,0.9)]"></div>
             </div>
           </div>
           <div className="flex justify-between text-[10px] text-zinc-400 font-mono px-1">
-            <span>01:24</span>
-            <span>03:45</span>
+            <span>{formatTime(currentTime)}</span>
+            <span>{formatTime(duration)}</span>
           </div>
         </div>
 
         {/* 播放控制按钮 */}
         <div className="flex items-center justify-between px-4">
-          <button className="text-zinc-400 hover:text-white transition-colors"><Shuffle size={20} /></button>
+          <button onClick={togglePlayMode} className="text-zinc-400 hover:text-white transition-colors">
+            {playMode === 'sequence' && <Repeat size={20} />}
+            {playMode === 'loop' && <Repeat1 size={20} className="text-emerald-400" />}
+            {playMode === 'shuffle' && <Shuffle size={20} />}
+          </button>
           <button onClick={prevSong} className="text-zinc-100 hover:text-emerald-400 transition-colors active:scale-90"><SkipBack size={24} fill="currentColor" /></button>
           
           <button 
@@ -163,6 +347,52 @@ export default function Player() {
           <button className="text-zinc-400 hover:text-white transition-colors"><ListMusic size={20} /></button>
         </div>
       </div>
+      {/* 添加到歌单弹窗 */}
+      <AnimatePresence>
+        {showPlaylistModal && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="absolute inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-6"
+            onClick={() => setShowPlaylistModal(false)}
+          >
+            <motion.div 
+              initial={{ scale: 0.9, y: 20 }}
+              animate={{ scale: 1, y: 0 }}
+              exit={{ scale: 0.9, y: 20 }}
+              className="w-full max-w-sm bg-zinc-900 border border-white/10 rounded-3xl p-6 shadow-2xl"
+              onClick={e => e.stopPropagation()}
+            >
+              <div className="flex justify-between items-center mb-6">
+                <h3 className="text-lg font-semibold">添加到歌单</h3>
+                <button onClick={() => setShowPlaylistModal(false)} className="text-zinc-400 hover:text-white">
+                  <X size={20} />
+                </button>
+              </div>
+              <div className="space-y-3 max-h-[60vh] overflow-y-auto hide-scrollbar">
+                {userPlaylists.length > 0 ? userPlaylists.map(list => (
+                  <div 
+                    key={list.id} 
+                    onClick={() => handleAddToPlaylist(list.id)}
+                    className="flex items-center gap-4 p-3 rounded-xl hover:bg-zinc-800/50 transition-colors cursor-pointer"
+                  >
+                    <div className="w-12 h-12 rounded-lg bg-zinc-800 flex items-center justify-center text-zinc-500">
+                      <ListMusic size={24} />
+                    </div>
+                    <div className="flex-1 border-b border-white/5 pb-3">
+                      <p className="font-medium text-sm">{list.name}</p>
+                    </div>
+                  </div>
+                )) : (
+                  <p className="text-zinc-500 text-sm text-center py-4">暂无自建歌单，请先在“我的”页面创建</p>
+                )}
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
     </motion.div>
   );
 }
