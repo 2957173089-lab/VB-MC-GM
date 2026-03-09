@@ -1,0 +1,38 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+}
+
+body {
+  background-color: #09090b; /* zinc-950 */
+  color: #fafafa; /* zinc-50 */
+  margin: 0;
+  padding: 0;
+  /* 阻止移动端浏览器默认的下拉刷新和橡皮筋效果，增强 App 体验 */
+  overscroll-behavior-y: none; 
+  -webkit-font-smoothing: antialiased;
+}
+
+/* 适配移动端刘海屏/底部横条的安全区域 */
+.pb-safe {
+  padding-bottom: env(safe-area-inset-bottom, 16px);
+}
+.pt-safe {
+  padding-top: env(safe-area-inset-top, 16px);
+}
+
+/* 歌词上下边缘渐隐效果 (用于 Player 页面) */
+.mask-image-y {
+  mask-image: linear-gradient(to bottom, transparent, black 20%, black 80%, transparent);
+  -webkit-mask-image: linear-gradient(to bottom, transparent, black 20%, black 80%, transparent);
+}
+
+/* 隐藏滚动条但保留滚动功能 */
+.hide-scrollbar {
+  -ms-overflow-style: none;  /* IE and Edge */
+  scrollbar-width: none;  /* Firefox */
+}
+.hide-scrollbar::-webkit-scrollbar {
+  display: none; /* Chrome, Safari and Opera */
+}
